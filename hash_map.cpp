@@ -4,6 +4,8 @@
 
 #include "hash_map.h"
 
+#include <algorithm>
+
 map::iterator::iterator() : v(), m(), info("Default") {};
 
 map::iterator::iterator(map::iterator const& other) : v(other.v), m(other.m) {
@@ -18,6 +20,30 @@ map::iterator::iterator(map::iterator const& other, std::string info) : v(other.
 map::iterator::iterator(std::shared_ptr<Entry> const& en, map* const& m, std::string info) : v(en), m(m), info("[Created]" + info) {
     m->iterators.push_back(this);
 };
+
+map::iterator::~iterator() {
+    m->iterators.erase(std::find(m->iterators.begin(), m->iterators.end(), this));
+}
+
+map::iterator& map::iterator::operator=(map::iterator const &other) {
+    if (this != &other) {
+        iterator tmp = other;
+        swap(tmp);
+        tmp.m->iterators.erase(std::find(tmp.m->iterators.begin(), tmp.m->iterators.end(), this));
+        tmp.m = other.m;
+        other.m->iterators.push_back(this);
+    }
+    return *this;
+}
+
+void map::iterator::swap(map::iterator &other)
+{
+    using std::swap;
+    swap(this->m, other.m);
+    swap(this->v, other.v);
+    swap(this->info, other.info);
+}
+
 
 value_type& map::iterator::operator*() {
     assert(v && v->valid && !v->isFake);
@@ -105,8 +131,16 @@ map::map(int capacity) {
 }
 
 map::map(map const &other) {
-    if (this->fake_end != other.fake_end) {
-        table = other.table;
+    if (this != &other) {
+        /*table.resize(other.table, nullptr);
+        for (int i = 0; i < table.size(); i++) {
+            if (other.table[i]) {
+                table[i] = std::make_shared<Entry>(other.table[i]);
+                while(other.table[i]->next)
+            }
+        }*/
+        first_bucket = other.first_bucket;
+        last_bucket = other.last_bucket;
         ssize = other.size();
         fake_end = std::make_shared<Entry>();
         fake_end->valid = true;
@@ -116,12 +150,6 @@ map::map(map const &other) {
 
 map::~map() {
     clear();
-    std::set<iterator*> s(iterators.begin(), iterators.end());
-    iterators.assign(s.begin(), s.end());
-    s.clear();
-    for (int i = 0; i < s.size(); i++)
-        delete iterators[i];
-    iterators.clear();
 }
 
 map& map::operator=(map const &other) {
@@ -136,7 +164,7 @@ void map::swap(map &other) {
     swapper(*this, other);
 }
 
-bool map::empty() {
+bool map::empty() const {
     return ssize == 0;
 }
 
@@ -159,10 +187,10 @@ void swapper(map& a, map& b) {
     swap(a.ssize, b.ssize);
     swap(a.fake_end, b.fake_end);
     swap(a.iterators, b.iterators);
-    for (auto it : a.iterators)
-        it->m = &a;
-    for (auto it : b.iterators)
-        it->m = &b;
+    for (auto& e : a.iterators)
+        e->m = &a;
+    for (auto& e : b.iterators)
+        e->m = &b;
 }
 
 map::iterator map::insert(value_type const& value) {
@@ -180,21 +208,21 @@ map::iterator map::insert(value_type const& value) {
             last_bucket = h;
         }
         ssize++;
-        return *(new iterator(table[h], this, "Insert in new bucket"));
+        return iterator(table[h], this, "Insert in new bucket");
     } else { //Insert in bucket
         if (now->value.first == value.first) {
-            return *(new iterator(now, this, "Element already is inserted and is first in bucket"));
+            return iterator(now, this, "Element already is inserted and is first in bucket");
         } else {
             while (now->next != nullptr) {
                 now = now->next;
                 if (now->value.first == value.first)
-                    return *(new iterator(now, this, "Element already is inserted, and isn't first"));
+                    return iterator(now, this, "Element already is inserted, and isn't first");
             }
             now->next = std::make_shared<Entry>(Entry(value));
             now->next->valid = true;
             now->next->prev = now;
             ssize++;
-            return *(new iterator(now->next, this, "Inserted in existing bucket"));
+            return iterator(now->next, this, "Inserted in existing bucket");
         }
     }
 }
@@ -269,13 +297,13 @@ map::iterator map::find(key_type const& key) {
         now = now->next;
     }
     if (!now)
-        return *(new iterator(fake_end, this, "No element found"));
+        return iterator(fake_end, this, "No element found");
     else
-        return *(new iterator(now, this, "Found"));
+        return iterator(now, this, "Found");
 }
 
 map::iterator map::erase(map::iterator const& it) {
-    return *(new iterator(eraser(it.v->value.first).second, this, "Erased"));
+    return iterator(eraser(it.v->value.first).second, this, "Erased");
 }
 
 size_t map::erase(key_type const& key) {
@@ -284,10 +312,10 @@ size_t map::erase(key_type const& key) {
 
 map::iterator map::begin() {
     if (first_bucket == -1)
-        return *(new iterator(fake_end, this, "Begin with empty map"));
-    return *(new iterator(table[first_bucket], this, "Begin"));
+        return iterator(fake_end, this, "Begin with empty map");
+    return iterator(table[first_bucket], this, "Begin");
 }
 
 map::iterator map::end() {
-    return *(new iterator(fake_end, this, "End"));
+    return iterator(fake_end, this, "End");
 }

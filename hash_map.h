@@ -19,6 +19,8 @@ struct map {
         iterator operator++(int);
         iterator& operator--();
         iterator operator--(int);
+        iterator& operator=(iterator const&);
+        void swap(iterator &);
         friend bool operator==(iterator const&, iterator const&);
         friend bool operator!=(iterator const&, iterator const&);
 
@@ -26,6 +28,7 @@ struct map {
 
         friend struct map;
         iterator();
+        ~iterator();
         iterator(iterator const&);
         iterator(iterator const&, std::string);
         map *m;
@@ -42,7 +45,7 @@ struct map {
     map(map const&);
     map& operator=(map const&);
 
-    bool empty();
+    bool empty() const;
     size_t size() const;
     iterator insert(value_type const&);
     size_t erase(key_type const&);
